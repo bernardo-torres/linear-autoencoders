@@ -1,8 +1,8 @@
 # Inducing Linearity in Audio Autoencoders via Implicit Regularization
 
-[**Paper**](https://arxiv.org/abs/your-arxiv-link-here) | [**Demo Page**](https://bernardo-torres.github.io/projects/linear-cae/)
+This repository contains the official code and pretrained models for the paper **"Learning Linearity in Audio Consistency Autoencoders via Implicit Regularization"**.
 
-This repository contains the official code and pretrained models for the paper **"Learning Linearity in Audio Consistency Autoencoders via Implicit Regularization"**
+[**Paper**](https://arxiv.org/abs/your-arxiv-link-here) | [**Demo Page**](https://bernardo-torres.github.io/projects/linear-cae/)
 
 ## About The Project
 
@@ -22,12 +22,6 @@ To get started, install the `linear-cae` package using pip:
 
 ```bash
 pip install linear-cae
-```
-
-or if you use poetry:
-
-```bash
-poetry add linear-cae
 ```
 
 ## Usage
@@ -67,59 +61,80 @@ audio_tensor = torch.randn(1, 44100 * 2).to(device)
 
 z = model.encode(audio_tensor)
 reconstructed_audio = model.decode(z, full_length=audio_tensor.shape[-1])
-
-scaled_z = z * 0.5
-scaled_audio = model.decode(scaled_z, full_length=audio_tensor.shape[-1])
-...
 ```
 
-Check out the demo.ipynb notebook used to create the demos in our [project page](https://bernardo-torres.github.io/projects/linear-cae/) with latent space manipulations (requires the musdb dataset package).
+Check out the `demo.ipynb` notebook used to create the demos on our [project page](https://bernardo-torres.github.io/projects/linear-cae/) for more examples of latent space manipulations (requires the `musdb` dataset package).
 
-"talk about max batch size and max audio length here with overlap add here"
+### Handling Long Audio Files
+
+To handle long audio files without running out of memory, you can specify `max_chunk_size` when loading the model. Audio longer than this size will be automatically processed in overlapping chunks.
+
+```python
+# Set max_chunk_size to 10 seconds of audio at 44.1 kHz
+model = Autoencoder.from_pretrained("lin-cae", max_chunk_size=44100 * 10)
+model.to(device)
+
+# Encode a long audio file (e.g., 30 seconds)
+long_audio_tensor = torch.randn(1, 44100 * 30).to(device)
+z_chunked = model.encode(long_audio_tensor)
+
+# The output z_chunked will be a 4D tensor: [batch_size, num_chunks, channels, latent_dim]
+print(z_chunked.shape)
+
+# Decoding the chunked latent requires the original audio length for proper reconstruction
+reconstructed_long_audio = model.decode(z_chunked, full_length=long_audio_tensor.shape[-1])
+```
+
+The model uses an overlap-add mechanism with a crossfade to seamlessly stitch the decoded chunks back together. You can control the amount of overlap with the `overlap_percentage` argument during model initialization. We recommend some overlap to avoid artifacts at chunk boundaries.
 
 ## Algorithm
 
-While the full training code will be released soon for CAEs, here is a general pseudo-algorithm for how to adapt any autoencoder training loop to induce linearity using our proposed method.
+While the full training code for CAEs will be released soon, here is a general pseudo-algorithm for how to adapt any autoencoder training loop to induce linearity using our proposed method. The core idea is to use data augmentation to implicitly teach the model the properties of linearity.
 
-The core idea is to use data augmentation to implicitly teach the model the properties of linearity.
-
-```
+```python
 # Pseudo-algorithm for training a linear autoencoder
 
 for each batch of audio data x:
   original_batch_size = x.shape[0]
-  # 1. Create artificial mixtures for additivity
-  x_roll = roll(x)
+
+  # 1. Create artificial mixtures
+  x_roll = torch.roll(x, shifts=1, dims=0) # Circularly shift the batch
   x_mixed = x + x_roll
-  x = torch.cat([x, x_mixed], dim=0) # Both original and mixed data
+  x_augmented = torch.cat([x, x_mixed], dim=0) # Batch now contains original and mixed audio
 
   # 2. Encode all audio to get latents
-  z = encoder(z)
+  z = encoder(x_augmented)
 
-  # Mix the latents corresponding to the mixed audio
-  z_roll = roll(z[:original_batch_size])
-  z_mixed = z[:original_batch_size] + z_roll
-  new_z = torch.cat([z[:original_batch_size], z_mixed], dim=0)
+  # For the mixed portion of the batch, create the "additive" latent
+  # by summing the latents of the original unmixed sources.
+  z_original = z[:original_batch_size]
+  z_roll = torch.roll(z_original, shifts=1, dims=0)
+  z_add = z_original + z_roll
 
-  # 3. Apply random gains for homogeneity
-  gains = sample_random_gains()
-  z_scaled = new_z * gains
-  x_scaled = x * gains
+  # Replace the encoded latents of the mixed audio with the sum of source latents
+  z_final = torch.cat([z_original, z_add], dim=0)
+
+  # 3. Apply random gains to enforce Homogeneity
+  gains = sample_random_gains(x_augmented.shape[0])
+  z_scaled = z_final * gains[:, None, None]
+  x_scaled = x_augmented * gains[:, None]
 
   # 4. Standard autoencoder training step
   # The decoder receives the scaled latent and must reconstruct the scaled audio
-  X_reconstructed = decoder(z_scaled)
+  x_reconstructed = decoder(z_scaled)
 
-  loss = reconstruction_loss(X_reconstructed, X_scaled)
+  loss = reconstruction_loss(x_reconstructed, x_scaled)
+
+  # Update model weights
+  optimizer.step()
 ```
 
-For diffusion/Consistency Autoencoders, the scaled latents are used as conditioning for the denoising of a currupted version of the scaled audio (see our paper for details).
+For Consistency Autoencoders (CAEs), as used in the paper, `x_scaled` is first corrupted with noise, and the decoder (a denoising model) is conditioned on `z_scaled` to reconstruct the clean `x_scaled`.
 
 ## Citation
 
 If you use our work in your research, please cite our paper:
 
 ```bibtex
-
 
 ```
