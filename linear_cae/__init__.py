@@ -1,1 +1,2 @@
-from .inference import AutoencoderInferenceModel
+from .inference import Autoencoder as AutoencoderInferenceModel
+from .inference import Autoencoder

@@ -1,7 +1,9 @@
 import os
+import warnings
 from pathlib import Path
 
 import torch
+import torch.nn.functional as F
 import yaml
 from huggingface_hub import hf_hub_download
 
@@ -11,7 +13,11 @@ from linear_cae.components.generator import UNet
 from linear_cae.utils import _NoOpEMA
 
 HF_REPO = "BernardoTorres/linear_consistency_autoencoders"
-
+id_to_hash = {
+    "m2l": "1511f18a",
+    "lin-cae": "0a3afbec",
+    "lin-cae-2": "2f4c6d21",
+}
 
 class EncoderInferenceModel(torch.nn.Module):
     """Encoder inference model, it can accept generator arguments if the encoder has a loose **kwargs** interface."""
@@ -58,7 +64,7 @@ class EncoderInferenceModel(torch.nn.Module):
         return self(x, *args, **kwargs)
 
 
-class AutoencoderInferenceModel(torch.nn.Module):
+class Autoencoder(torch.nn.Module):
     def __init__(
         self,
         frontend,
@@ -69,6 +75,8 @@ class AutoencoderInferenceModel(torch.nn.Module):
         mixed_precision=False,
         enable_grad_denoise=False,
         name="model",
+        max_chunk_size: int = None,
+        overlap_percentage: float = 0.25,
     ):
         super().__init__()
         self.generator = generator
@@ -88,6 +96,8 @@ class AutoencoderInferenceModel(torch.nn.Module):
         self.mixed_precision = mixed_precision
         self.name = name
         self.max_batch_size = max_batch_size
+        self.max_chunk_size = max_chunk_size
+        self.overlap_percentage = overlap_percentage
         self.ema = (
             _NoOpEMA()
         )  # No-op EMA for compatibility if the model is encoded under the EMA wrapper
@@ -109,18 +119,19 @@ class AutoencoderInferenceModel(torch.nn.Module):
         Loads the model and configuration from a Hugging Face Hub repository.
         """
         # Download all necessary files
-        model_id = model_id + "_weights"
+        model_id = id_to_hash.get(model_id, model_id)
+        hf_id = model_id + "_weights"
         checkpoint_path = hf_hub_download(
-            repo_id=HF_REPO, filename=f"{model_id}/autoencoder_inference_model_{ckpt_type}.pth"
+            repo_id=HF_REPO, filename=f"{hf_id}/autoencoder_inference_model_{ckpt_type}.pth"
         )
         frontend_args_path = hf_hub_download(
-            repo_id=HF_REPO, filename=f"{model_id}/frontend_kwargs_{ckpt_type}.yaml"
+            repo_id=HF_REPO, filename=f"{hf_id}/frontend_kwargs_{ckpt_type}.yaml"
         )
         generator_args_path = hf_hub_download(
-            repo_id=HF_REPO, filename=f"{model_id}/generator_kwargs_{ckpt_type}.yaml"
+            repo_id=HF_REPO, filename=f"{hf_id}/generator_kwargs_{ckpt_type}.yaml"
         )
         diffusion_args_path = hf_hub_download(
-            repo_id=HF_REPO, filename=f"{model_id}/diffusion_kwargs_{ckpt_type}.yaml"
+            repo_id=HF_REPO, filename=f"{hf_id}/diffusion_kwargs_{ckpt_type}.yaml"
         )
 
         with open(frontend_args_path) as f:
@@ -130,7 +141,7 @@ class AutoencoderInferenceModel(torch.nn.Module):
         with open(diffusion_args_path) as f:
             diffusion_args = yaml.safe_load(f)
 
-        model = cls(frontend_args, generator_args, diffusion_args, **kwargs)
+        model = cls(frontend_args, generator_args, diffusion_args, name=model_id, **kwargs)
 
         # Load the model state dict
         state_dict = torch.load(checkpoint_path, map_location="cpu")
@@ -175,34 +186,121 @@ class AutoencoderInferenceModel(torch.nn.Module):
         self.encoder = encoder
 
     def encode(self, x, extract_features=False, max_batch_size=None):
-
+        """
+        Encodes audio x [B, T] into latents z.
+        Handles chunking if T > max_chunk_size.
+        Returns:
+            - [B, C, Z] if not chunked
+            - [B, num_chunks, C, Z] if chunked
+        """
         if self.encoder is None:
             self._set_encoder(self.generator.encoder)
 
         with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=self.mixed_precision):
-            x = self.frontend.to_representation(x)
 
-            if max_batch_size is None:
-                max_batch_size = self.max_batch_size
-            if x.shape[0] <= max_batch_size:
-                # Batch size is within the limit, process as a single batch
-                return self.encoder(x, extract_features=extract_features)
+            # --- CHUNKING LOGIC ---
+            if self.max_chunk_size is None or x.shape[-1] <= self.max_chunk_size:
+                # No chunking needed
+                x_repr = self.frontend.to_representation(x)
+                return self._encode_internal(x_repr, extract_features, max_batch_size)
             else:
-                # Batch size exceeds the limit, split into chunks and process sequentially
-                repr_chunks = torch.split(x, self.max_batch_size, dim=0)
-                latent_chunks = []
-                for chunk in repr_chunks:
-                    latent_chunk = self.encoder(chunk, extract_features=extract_features)
-                    latent_chunks.append(latent_chunk)
-                return torch.cat(latent_chunks, dim=0)
+                batch_size, T = x.shape
+                chunk_len = self.max_chunk_size
+                overlap_len = int(chunk_len * self.overlap_percentage)
+                step = chunk_len - overlap_len
 
-    def decode(self, z, *args, **kwargs):
+                padding = (step - (T - chunk_len) % step) % step
+                padded_audio = torch.nn.functional.pad(x, (0, padding))
+
+                # Create chunks
+                chunks = padded_audio.unfold(dimension=-1, size=chunk_len, step=step)
+                # chunks shape is [B, num_chunks, chunk_len]
+                num_chunks = chunks.shape[1]
+
+                chunks_batched = chunks.reshape(-1, chunk_len) # [B * num_chunks, chunk_len]
+
+                # Encode chunks
+                chunks_repr = self.frontend.to_representation(chunks_batched)
+                z_batched = self._encode_internal(chunks_repr, extract_features, max_batch_size) # [B * num_chunks, C, Z]
+
+                # Reshape back to [B, num_chunks, C, Z]
+                _, C, Z = z_batched.shape
+                z = z_batched.view(batch_size, num_chunks, C, Z)
+                return z
+
+    def _encode_internal(self, x_repr, extract_features=False, max_batch_size=None):
         """
-        Decode the latent representation z back to waveform.
-        This method is used for inference and can be called directly.
+        Internal encode method that processes spectrograms and handles max_batch_size.
+        Assumes x_repr is [B, C, F, T_spec]
         """
-        with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=self.mixed_precision):
-            return self.generate(latents=z, *args, **kwargs)
+        if max_batch_size is None:
+            max_batch_size = self.max_batch_size
+
+        if x_repr.shape[0] <= max_batch_size:
+            # Batch size is within the limit, process as a single batch
+            return self.encoder(x_repr, extract_features=extract_features)
+        else:
+            # Batch size exceeds the limit, split into chunks and process sequentially
+            repr_chunks = torch.split(x_repr, max_batch_size, dim=0)
+            latent_chunks = []
+            for chunk in repr_chunks:
+                latent_chunk = self.encoder(chunk, extract_features=extract_features)
+                latent_chunks.append(latent_chunk)
+            return torch.cat(latent_chunks, dim=0)
+
+    def _decode_internal(self, z, *args, **kwargs):
+        """
+        Internal decode method that processes latents and calls generate.
+        Assumes z is [B, C, Z]
+        """
+        return self.generate(latents=z, *args, **kwargs)
+
+    def decode(self, z, full_length=None, *args, **kwargs):
+        """
+        Public decode method.
+        Handles OLA reconstruction if latents are 4D.
+        Trims audio if full_length is provided.
+        """
+
+        # --- NO CHUNKING ---
+        if z.ndim == 3:
+            # Standard 3D latent [B, C, Z], decode normally
+            # User is responsible for passing 'samples' if needed
+            return self._decode_internal(z, *args, samples=full_length, **kwargs)
+
+        # --- CHUNKING ---
+        elif z.ndim == 4:
+            assert full_length is not None, (
+            "final audio length must be provided when decoding chunked latents via kwarg full_length\n"
+            "Try model.decode(z, full_length=original_audio_length)"
+            )
+
+            # 4D latent [B, num_chunks, C, Z], perform OLA
+            B, num_chunks, C, Z = z.shape
+            z_batched = z.view(-1, C, Z) # [B * num_chunks, C, Z]
+
+            chunk_len = self.max_chunk_size
+            if chunk_len is None:
+                raise ValueError("Cannot decode 4D chunked audio if max_chunk_size is not set in the model.\n"
+                                 "Try setting model.max_chunk_size (in samples) before encoding/decoding.")
+            overlap_len = int(chunk_len * self.overlap_percentage)
+            step = chunk_len - overlap_len
+
+            # Pass chunk_len to internal decoder via 'samples' kwarg
+            kwargs['samples'] = chunk_len
+            dec_chunks_batched = self._decode_internal(z_batched, *args, **kwargs)
+
+            return _overlap_add_crossfade(
+                dec_chunks_batched,
+                batch_size=B,
+                num_chunks=num_chunks,
+                in_step=step,
+                in_chunk_len=chunk_len,
+                final_len=full_length
+            )
+
+        else:
+            raise ValueError(f"Latent tensor z has invalid dimensions: {z.shape}. Expected 3D or 4D.")
 
     def generate(
         self, diffusion_steps=None, seconds=None, samples=None, latents=None, max_batch_size=None
@@ -259,6 +357,61 @@ class AutoencoderInferenceModel(torch.nn.Module):
         )
         # return to_waveform(generated_images)
         return self.frontend.to_waveform(generated_images)[..., :samples]
+
+
+def _overlap_add_crossfade(processed_chunks, batch_size, num_chunks, in_step, in_chunk_len, final_len):
+    """
+    Reconstructs audio from processed chunks using overlap-add.
+    Uses a fast vectorized crossfade and F.fold() for overlapping chunks,
+    and a simple reshape() for non-overlapping chunks.
+    """
+    device = processed_chunks.device
+    out_chunk_len = processed_chunks.shape[-1]
+
+    # Reshape back to [batch_size, num_chunks, out_chunk_len]
+    processed_chunks = processed_chunks.view(batch_size, num_chunks, out_chunk_len)
+
+    # Calculate output step and overlap, maintaining the input ratio
+    out_step = out_chunk_len * in_step // in_chunk_len
+    out_overlap_len = out_chunk_len - out_step
+
+    # Calculate the full output length
+    out_len = out_step * (num_chunks - 1) + out_chunk_len
+
+    if out_overlap_len > 0:
+        # Create fade windows
+        fade_in = torch.linspace(0., 1., out_overlap_len, device=device)
+        fade_out = 1. - fade_in
+
+        # Apply fades in a vectorized way
+        # Apply fade-in to all chunks *except the first*
+        processed_chunks[:, 1:, :out_overlap_len] *= fade_in[None, None, :]
+
+        # Apply fade-out to all chunks *except the last*
+        processed_chunks[:, :-1, -out_overlap_len:] *= fade_out[None, None, :]
+
+        # Reshape for fold: [B, kernel_size, num_chunks]
+        processed_chunks_transposed = processed_chunks.transpose(1, 2)
+
+        reconstructed_audio = F.fold(
+            processed_chunks_transposed,
+            output_size=(out_len, 1),      # (L_out, W_out=1)
+            kernel_size=(out_chunk_len, 1), # (kH, kW=1)
+            stride=(out_step, 1)            # (dH, dW=1)
+        )
+
+        # Squeeze the dummy dimensions
+        reconstructed_audio = reconstructed_audio.squeeze(1).squeeze(-1) # [B, out_len]
+
+    else:
+        # Sanity check
+        if out_len != num_chunks * out_chunk_len:
+             warnings.warn(f"OLA: Non-overlapping length mismatch. out_len={out_len}, expected={num_chunks * out_chunk_len}")
+
+        reconstructed_audio = processed_chunks.reshape(batch_size, -1)
+
+    # Trim to the final, original length
+    return reconstructed_audio[..., :final_len]
 
 
 def load_yaml(file_path):
