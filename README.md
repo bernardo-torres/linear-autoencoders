@@ -2,7 +2,7 @@
 
 This repository contains the official code and pretrained models for the paper **"Learning Linearity in Audio Consistency Autoencoders via Implicit Regularization"**.
 
-[**Paper**](https://arxiv.org/abs/2510.23530) | [**Demo Page**](https://bernardo-torres.github.io/projects/linear-cae/)
+[**Paper**](https://arxiv.org/abs/2510.23530) | [**Demo Page (with audio examples)**](https://bernardo-torres.github.io/projects/linear-cae/)
 
 ## About The Project
 
@@ -42,9 +42,11 @@ model.eval().to(device)
 
 Available `model_id`s are:
 
-- `"m2l"`: The baseline Music2Latent model.
+- `"m2l"`: [Music2Latent](https://github.com/SonyCSLParis/music2latent/) retrained on our dataset as a baseline.
 - `"lin-cae"`: Our proposed Linear Consistency Autoencoder.
 - `"lin-cae-2"`: A second version of our Lin-CAE trained without gain annealing described in the paper.
+
+Note: the latents produced by lin-cae models can have very small norms compared to m2l or other autoencoders. Depending on your application, you might want to consider normalizing the latents to the standard deviation of your dataset latents before processing.
 
 ### Encoding and Decoding Audio
 
