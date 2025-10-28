@@ -2,7 +2,7 @@
 
 This repository contains the official code and pretrained models for the paper **"Learning Linearity in Audio Consistency Autoencoders via Implicit Regularization"**.
 
-[**Paper**](https://arxiv.org/abs/your-arxiv-link-here) | [**Demo Page**](https://bernardo-torres.github.io/projects/linear-cae/)
+[**Paper**](https://arxiv.org/abs/2510.23530) | [**Demo Page**](https://bernardo-torres.github.io/projects/linear-cae/)
 
 ## About The Project
 
@@ -136,5 +136,13 @@ For Consistency Autoencoders (CAEs), as used in the paper, `x_scaled` is first c
 If you use our work in your research, please cite our paper:
 
 ```bibtex
-
+@misc{torres2025learninglinearityaudioconsistency,
+      title={Learning Linearity in Audio Consistency Autoencoders via Implicit Regularization},
+      author={Bernardo Torres and Manuel Moussallam and Gabriel Meseguer-Brocal},
+      year={2025},
+      eprint={2510.23530},
+      archivePrefix={arXiv},
+      primaryClass={cs.SD},
+      url={https://arxiv.org/abs/2510.23530},
+}
 ```
