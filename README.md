@@ -1,4 +1,4 @@
-# Inducing Linearity in Audio Autoencoders via Implicit Regularization
+# Linear Consistency Autoencoders
 
 This repository contains the official code and pretrained models for the paper **"Learning Linearity in Audio Consistency Autoencoders via Implicit Regularization"**.
 
@@ -6,7 +6,7 @@ This repository contains the official code and pretrained models for the paper *
 
 ## About The Project
 
-This work introduces **Linear Consistency Autoencoders (Lin-CAE)**, a straightforward training methodology to induce linearity in high-compression audio autoencoders. By using data augmentation, we enforce **homogeneity** (equivariance to scalar gain) and **additivity** (preservation of addition) in the latent space without altering the model's architecture or loss function.
+This work introduces **Linear Consistency Autoencoders (Lin-CAE)**, a training methodology to induce linearity in audio autoencoders. By using data augmentation, we enforce **homogeneity** (equivariance to scalar gain) and **additivity** (preservation of addition) in the latent space without altering the model's architecture or loss function.
 
 This creates a structured latent space where simple algebraic operations correspond directly to intuitive audio manipulations like mixing and volume scaling.
 
@@ -14,7 +14,9 @@ This creates a structured latent space where simple algebraic operations corresp
   <img src="https://bernardo-torres.github.io/documents/images/linear-cae/overview.png" width="400"/>
 </p>
 
-This repository currently provides inference code for our pretrained models and the code to reproduce the demos on our project page. **Training code will be made available soon.**
+This repository currently provides inference code for our pretrained models and the code to reproduce the demos on our project page. Training code will be made available soon.
+
+## Usage
 
 You can install the `linear-cae` package using pip (or whatever package manager you prefer, we recommend using [Poetry](https://python-poetry.org/) for development):
 
@@ -22,10 +24,6 @@ You can install the `linear-cae` package using pip (or whatever package manager 
 pip install linear-cae
 poetry add linear-cae  # if using Poetry
 ```
-
-## Usage
-
-You can easily load our pretrained models and use them for audio encoding and decoding.
 
 ### Loading a Pretrained Model
 
@@ -35,13 +33,11 @@ The `Autoencoder` class provides a `from_pretrained` method to load models from 
 from linear_cae import Autoencoder
 import torch
 
-# Load the Lin-CAE model
 model_id = "lin-cae"  # or "m2l", "lin-cae-2"
 model = Autoencoder.from_pretrained(model_id)
 
-# Move the model to your desired device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model.to(device)
+model.eval().to(device)
 ```
 
 Available `model_id`s are:
@@ -70,7 +66,7 @@ To handle long audio files without running out of memory, you can specify `max_c
 
 ```python
 # Set max_chunk_size to 10 seconds of audio at 44.1 kHz
-model = Autoencoder.from_pretrained("lin-cae", max_chunk_size=44100 * 10)
+model = Autoencoder.from_pretrained("lin-cae", max_chunk_size=44100 * 10, overlap_percentage=0.25)
 model.to(device)
 
 # Encode a long audio file (e.g., 30 seconds)
@@ -84,7 +80,7 @@ print(z_chunked.shape)
 reconstructed_long_audio = model.decode(z_chunked, full_length=long_audio_tensor.shape[-1])
 ```
 
-The model uses an overlap-add mechanism with a crossfade to seamlessly stitch the decoded chunks back together. You can control the amount of overlap with the `overlap_percentage` argument during model initialization. We recommend some overlap to avoid artifacts at chunk boundaries.
+The model uses an overlap-add mechanism with a crossfade to stitch the decoded chunks back together. You can control the amount of overlap with the `overlap_percentage` argument during model initialization. We recommend some overlap to avoid artifacts at chunk boundaries.
 
 ## Algorithm
 
