@@ -1,11 +1,16 @@
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.poetry]
-name = "linear_cae"
+name = "linear-cae"
 version = "0.1.0"
 description = "Linear Consistency Autoencoders"
 authors = [
     "Bernardo Torres",
     "Gabriel Meseguer-Brocal",
 ]
+packages = [{include = "linear_cae", from = "src"}]
 readme = "README.md"
 
 [tool.poetry.dependencies]
@@ -13,21 +18,9 @@ python = ">=3.11"
 numpy = "^1.23.5"
 matplotlib = ">=3.10.1"
 torch = ">=2.0.1"
-torchaudio = ">=2.0.1"
 soundfile = ">=0.13.1"
-librosa = ">=0.11.0"
-scipy = ">=1.15.2,<2.0.0"
-resampy = ">=0.4.3,<0.5.0"
-auraloss = ">=0.4.0,<0.5.0"
-hydra-core = ">=1.3.2,<2.0.0"
-seaborn = ">=0.13.2,<0.14.0"
-rootutils = ">=1.0.7,<2.0.0"
-hydra-colorlog = ">=1.2.0,<2.0.0"
-bokeh = ">=3.7.2,<4.0.0"
-holoviews = ">=1.20.2,<2.0.0"
-tzlocal = ">=5.3.1,<6.0.0"
-rich = "^14.0.0"
-gputil = "^1.4.0"
+huggingface_hub = "*"
+PyYAML = "*"
 
 [tool.poetry.group.dev]
 optional = true
@@ -35,24 +28,42 @@ optional = true
 [tool.poetry.group.baselines]
 optional = true
 
+[tool.poetry.group.stable-audio]
+optional = true
+
 [tool.poetry.group.dev.dependencies]
 black = "^25.1.0"
 isort = "^6.0.1"
 ruff = "^0.14.0"
 torch = ">=2.7.0"
-torchaudio = ">=2.7.0"
+torchaudio = ">=2.0.1"
 lightning = ">=2.5.1.post0,<3.0.0"
-diffusers = "0.25.0"
 ipython = "^9.3.0"
 musdb = "^0.4.3"
 ipykernel = "*"
-huggingface_hub = "*"
 wandb = ">=0.19.9,<0.20.0"
+auraloss = ">=0.4.0,<0.5.0"
+hydra-core = ">=1.3.2,<2.0.0"
+holoviews = ">=1.20.2,<2.0.0"
+tzlocal = ">=5.3.1,<6.0.0"
+seaborn = ">=0.13.2,<0.14.0"
+rich = "^14.0.0"
+rootutils = ">=1.0.7,<2.0.0"
+hydra-colorlog = ">=1.2.0,<2.0.0"
+bokeh = ">=3.7.2,<4.0.0"
+gputil = "^1.4.0"
+resampy = ">=0.4.3,<0.5.0"
+librosa = ">=0.11.0"
+scipy = ">=1.15.2,<2.0.0"
 
 [tool.poetry.group.baselines.dependencies]
 tensorboard = ">=2.19.0,<3.0.0"
 music2latent = "*"
 transformers = "^4.56.0"
+diffusers = "0.25.0"
+
+# [tool.poetry.group.stable-audio.dependencies]
+# stable-audio-tools = "^0.0.19"
 
 
 [tool.poetry.scripts]

@@ -16,12 +16,11 @@ This creates a structured latent space where simple algebraic operations corresp
 
 This repository currently provides inference code for our pretrained models and the code to reproduce the demos on our project page. **Training code will be made available soon.**
 
-## Getting Started
-
-To get started, install the `linear-cae` package using pip:
+You can install the `linear-cae` package using pip (or whatever package manager you prefer, we recommend using [Poetry](https://python-poetry.org/) for development):
 
 ```bash
 pip install linear-cae
+poetry add linear-cae  # if using Poetry
 ```
 
 ## Usage

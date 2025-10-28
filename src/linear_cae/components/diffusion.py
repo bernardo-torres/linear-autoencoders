@@ -1,10 +1,11 @@
 # Inspired by https://github.com/SonyCSLParis/music2latent/
 
-from typing import Literal, Optional
+from typing import Literal
 
 import numpy as np
 import torch
 import torch.nn as nn
+
 
 # Preconditioning
 def get_c(sigma, sigma_min=0.002, sigma_data=0.5):
@@ -35,7 +36,7 @@ class Diffusion(nn.Module):
         p_std: float = 2.0,
         sigma_data: float = 0.5,
         use_lognormal: bool = True,
-        total_iters: Optional[int] = None,
+        total_iters: int | None = None,
         enable_grad_denoise: bool = False,
     ):
         super().__init__()
