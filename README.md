@@ -46,7 +46,7 @@ Available `model_id`s are:
 - `"lin-cae"`: Our proposed Linear Consistency Autoencoder.
 - `"lin-cae-2"`: A second version of our Lin-CAE trained without gain annealing described in the paper.
 
-Note: the latents produced by lin-cae models can have very small norms compared to m2l or other autoencoders. Depending on your application, you might want to consider normalizing the latents to the standard deviation of your dataset latents before processing.
+Note: the latents produced by lin-cae models can have very small norms compared to m2l or other autoencoders. Depending on your application, you might want to consider scaling up the latents to match the standard deviation of your dataset latents before processing.
 
 ### Encoding and Decoding Audio
 
