@@ -215,7 +215,7 @@ class Autoencoder(torch.nn.Module):
         Internal decode method that processes latents and calls generate.
         Assumes z is [B, C, Z]
         """
-        return self._generate(latents=z, *args, **kwargs) / self.scale_factor
+        return self._generate(latents=z / self.scale_factor, *args, **kwargs)
 
     def decode(self, z, full_length=None, *args, **kwargs):
         """
