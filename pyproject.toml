@@ -4,7 +4,7 @@ where = ["src"]
 
 [tool.poetry]
 name = "linear-cae"
-version = "0.1.0"
+version = "0.1.2"
 description = "Linear Consistency Autoencoders"
 authors = [
     "Bernardo Torres",

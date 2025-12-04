@@ -18,6 +18,12 @@ id_to_hash = {
     "lin-cae-2": "2f4c6d21",
 }
 
+id_to_scale_factor = {
+    "m2l": 15.0,
+    "lin-cae": 33.0,
+    "lin-cae-2": 40.0,
+}
+
 class Autoencoder(torch.nn.Module):
     def __init__(
         self,
@@ -31,6 +37,7 @@ class Autoencoder(torch.nn.Module):
         name="model",
         max_chunk_size: int = None,
         overlap_percentage: float = 0.25,
+        scale_factor: float = None,
     ):
         super().__init__()
         self.generator = generator
@@ -52,6 +59,7 @@ class Autoencoder(torch.nn.Module):
         self.max_batch_size = max_batch_size
         self.max_chunk_size = max_chunk_size
         self.overlap_percentage = overlap_percentage
+        self.scale_factor = scale_factor if scale_factor is not None else id_to_scale_factor.get(name, 1.0)
         self.ema = (
             _NoOpEMA()
         )  # No-op EMA for compatibility if the model is encoded under the EMA wrapper
@@ -192,7 +200,7 @@ class Autoencoder(torch.nn.Module):
 
         if x_repr.shape[0] <= max_batch_size:
             # Batch size is within the limit, process as a single batch
-            return self.encoder(x_repr, extract_features=extract_features)
+            return self.encoder(x_repr, extract_features=extract_features) * self.scale_factor
         else:
             # Batch size exceeds the limit, split into chunks and process sequentially
             repr_chunks = torch.split(x_repr, max_batch_size, dim=0)
@@ -200,14 +208,14 @@ class Autoencoder(torch.nn.Module):
             for chunk in repr_chunks:
                 latent_chunk = self.encoder(chunk, extract_features=extract_features)
                 latent_chunks.append(latent_chunk)
-            return torch.cat(latent_chunks, dim=0)
+            return torch.cat(latent_chunks, dim=0) * self.scale_factor
 
     def _decode_internal(self, z, *args, **kwargs):
         """
         Internal decode method that processes latents and calls generate.
         Assumes z is [B, C, Z]
         """
-        return self.generate(latents=z, *args, **kwargs)
+        return self._generate(latents=z, *args, **kwargs) / self.scale_factor
 
     def decode(self, z, full_length=None, *args, **kwargs):
         """
@@ -256,9 +264,25 @@ class Autoencoder(torch.nn.Module):
         else:
             raise ValueError(f"Latent tensor z has invalid dimensions: {z.shape}. Expected 3D or 4D.")
 
+
     def generate(
         self, diffusion_steps=None, seconds=None, samples=None, latents=None, max_batch_size=None
     ):
+        """
+        Public generate is intentionally disabled.
+        Use encode()/decode() instead so that latent scaling is handled correctly.
+        """
+        raise RuntimeError(
+            "Direct calls to `generate` are disabled. "
+            "Use `encode`/`decode` so latent scaling is handled automatically."
+        )
+    
+    def _generate(
+        self, diffusion_steps=None, seconds=None, samples=None, latents=None, max_batch_size=None
+    ):
+        
+        if latents is None:
+            raise ValueError("`_generate` must be called with `latents` (unconditional generation not supported).")
         if max_batch_size is None:
             max_batch_size = self.max_batch_size
         if diffusion_steps is None:
@@ -268,7 +292,7 @@ class Autoencoder(torch.nn.Module):
             latents_chunks = torch.split(latents, max_batch_size, dim=0)
             generated_chunks = []
             for chunk in latents_chunks:
-                generated_chunk = self.generate(
+                generated_chunk = self._generate(
                     diffusion_steps=diffusion_steps,
                     seconds=seconds,
                     samples=samples,

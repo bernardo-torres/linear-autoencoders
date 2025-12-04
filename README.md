@@ -46,7 +46,15 @@ Available `model_id`s are:
 - `"lin-cae"`: Our proposed Linear Consistency Autoencoder.
 - `"lin-cae-2"`: A second version of our Lin-CAE trained without gain annealing described in the paper.
 
-Note: the latents produced by lin-cae models can have very small norms compared to m2l or other autoencoders. Depending on your application, you might want to consider scaling up the latents to match the standard deviation of your dataset latents before processing.
+Note: we include a default `scale_factor` for each model to account for differences in latent space scale. The default value scales the latents to have approximately a standard deviation of 1.0 in the MUSDB train set. This can be manually overridden when loading the model by passing a different `scale_factor` argument to `from_pretrained`. Depending on your application (or data domain), you might want to consider providing a scaling to match the standard deviation of your dataset latents. Example:
+
+```python
+# Multiplies the latents by 20.0 after encoding and divides by 20.0 before decoding
+# All done internally by the model, no need to deal with it manually.
+model = Autoencoder.from_pretrained("lin-cae-2", scale_factor=20.0)
+```
+
+The models are trained on 44.1 kHz mono audio. encode and decode expect tensors of shape [batch_size, num_samples] at 44.1 kHz.
 
 ### Encoding and Decoding Audio
 
@@ -62,24 +70,36 @@ reconstructed_audio = model.decode(z, full_length=audio_tensor.shape[-1])
 
 Check out the `demo.ipynb` notebook used to create the demos on our [project page](https://bernardo-torres.github.io/projects/linear-cae/) for more examples of latent space manipulations (requires the `musdb` dataset package).
 
-### Handling Long Audio Files
+### Handling Long Audio Files and Batching
 
 To handle long audio files without running out of memory, you can specify `max_chunk_size` when loading the model. Audio longer than this size will be automatically processed in overlapping chunks.
 
+The parameter `max_batch_size` controls the maximum number of chunks processed in a single forward pass. If the number of chunks exceeds this value, they will be further split into smaller batches. You can adjust this parameter to match your available GPU memory.
+
 ```python
-# Set max_chunk_size to 10 seconds of audio at 44.1 kHz
-model = Autoencoder.from_pretrained("lin-cae", max_chunk_size=44100 * 10, overlap_percentage=0.25)
+# Set max_chunk_size to 10 seconds of audio at 44.1 kHz and max_batch_size to 8
+model = Autoencoder.from_pretrained("lin-cae",
+                                    max_chunk_size=44100 * 10,
+                                    overlap_percentage=0.25,
+                                    max_batch_size=8)
 model.to(device)
 
 # Encode a long audio file (e.g., 30 seconds)
-long_audio_tensor = torch.randn(1, 44100 * 30).to(device)
-z_chunked = model.encode(long_audio_tensor)
+# The chunks will be processed in max_batch_size batches internally
+long_audio_tensor_1 = torch.randn(1, 44100 * 30).to(device)
+long_audio_tensor_2 = torch.randn(1, 44100 * 30).to(device)
+z_chunked_1 = model.encode(long_audio_tensor_1)
+z_chunked_2 = model.encode(long_audio_tensor_2)
+
 
 # The output z_chunked will be a 4D tensor: [batch_size, num_chunks, channels, latent_dim]
-print(z_chunked.shape)
+print(z_chunked_1.shape)
+
+# Mix in the latent space
+z_chunked = z_chunked_1 + z_chunked_2
 
 # Decoding the chunked latent requires the original audio length for proper reconstruction
-reconstructed_long_audio = model.decode(z_chunked, full_length=long_audio_tensor.shape[-1])
+reconstructed_mix = model.decode(z_chunked, full_length=long_audio_tensor_1.shape[-1])
 ```
 
 The model uses an overlap-add mechanism with a crossfade to stitch the decoded chunks back together. You can control the amount of overlap with the `overlap_percentage` argument during model initialization. We recommend some overlap to avoid artifacts at chunk boundaries.
