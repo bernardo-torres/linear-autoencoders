@@ -81,8 +81,8 @@ class Autoencoder(torch.nn.Module):
         Loads the model and configuration from a Hugging Face Hub repository.
         """
         # Download all necessary files
-        model_id = id_to_hash.get(model_id, model_id)
-        hf_id = model_id + "_weights"
+        model_hash = id_to_hash.get(model_id, model_id)
+        hf_id = model_hash + "_weights"
         checkpoint_path = hf_hub_download(
             repo_id=HF_REPO, filename=f"{hf_id}/autoencoder_inference_model_{ckpt_type}.pth"
         )
