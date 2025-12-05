@@ -1,6 +1,7 @@
 # Linear Consistency Autoencoders
 
-[![PyPI Version](https://img.shields.io/pypi/v/linear-cae)](https://pypi.org/project/linear-cae)
+[![PyPI Version](https://img.shields.io/pypi/v/linear-cae)](https://pypi.org/project/linear-cae) [![Paper (arXiv)](https://img.shields.io/badge/arXiv-2510.23530-b31b1b.svg)](https://arxiv.org/abs/2510.23530)
+[![Demo](https://img.shields.io/badge/blog-demo-brightgreen)](https://bernardo-torres.github.io/projects/linear-cae/)
 
 This repository contains the official code and pretrained models for the paper **"Learning Linearity in Audio Consistency Autoencoders via Implicit Regularization"**.
 
