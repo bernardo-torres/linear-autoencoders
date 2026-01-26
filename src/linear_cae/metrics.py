@@ -236,12 +236,12 @@ class MRLogMelMetric(AudioToAudioMetric):
         )
 
 
-class SDSDRMetric(AudioToAudioMetric):
+class SNRMetric(AudioToAudioMetric):
     def __init__(self, device="cuda"):
         auraloss.time.apply_reduction = lambda losses, reduction: losses.mean(dim=(-1))
         super().__init__(
-            metric_name="sdr",
-            loss_fn_constructor=auraloss.time.SDSDRLoss,
+            metric_name="snr",
+            loss_fn_constructor=auraloss.time.SNRLoss,
             negate_result=True,  # Negate to convert loss to actual SDR value
             device=device,
             zero_mean=False,

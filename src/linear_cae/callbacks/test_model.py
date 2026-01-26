@@ -15,8 +15,8 @@ from wavetable import AudioLogger
 from linear_cae.metrics import (
     ERankMetric,
     MRSTFTMetric,
-    SDSDRMetric,
     SISDRMetric,
+    SNRMetric,
     relative_l2_error,
     svd_method,
 )
@@ -101,7 +101,7 @@ class TestModelCallback(Callback):
 
         for val_set in self.all_dataset_names:
             if self.sdr:
-                self.all_metrics[val_set]["sd-sdr"] = SDSDRMetric()
+                self.all_metrics[val_set]["snr"] = SNRMetric()
             if self.si_sdr:
                 self.all_metrics[val_set]["si-sdr"] = SISDRMetric()
             if self.reconstruction_loss:
@@ -116,15 +116,15 @@ class TestModelCallback(Callback):
                     )
 
             if self.equivariance_loss:
-                self.all_metrics[val_set]["gain_equivariance_latent_cosim"] = MeanMetric()
-                self.all_metrics[val_set]["gain_equivariance_error_signal"] = MeanMetric()
+                self.all_metrics[val_set]["enc_homogeneity"] = MeanMetric()
+                self.all_metrics[val_set]["dec_homogeneity_snr"] = SNRMetric()
 
             if self.latent_space_metrics:
                 self.all_metrics[val_set]["latent_erank"] = ERankMetric()
 
             if self.composability_metrics:
-                self.all_metrics[val_set]["additivity"] = MeanMetric()
-                self.all_metrics[val_set]["composability"] = MRSTFTMetric(
+                self.all_metrics[val_set]["enc_additivity"] = MeanMetric()
+                self.all_metrics[val_set]["dec_additivity"] = MRSTFTMetric(
                     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
                 )
                 self.all_metrics[val_set]["separability"] = MRSTFTMetric(
@@ -286,34 +286,38 @@ class TestModelCallback(Callback):
 
             # Equivariance metrics
             if self.equivariance_loss:
-                mse = torch.nn.MSELoss(reduction="none")
                 scales = [0.25, 0.5, 0.75, 1.1]
                 for scale in scales:
                     scale_tensor = torch.tensor(scale, device=pl_module.device)
 
-                    # 1. Latent equivariance
-                    latent_scaled = model.encode(x * scale_tensor)
-                    latent_error = torch.nn.functional.cosine_similarity(
-                        latent_scaled, latent * scale_tensor, dim=(1)
-                    ).mean(dim=(-1))
-                    self.all_metrics[val_set]["gain_equivariance_latent_cosim"].update(latent_error)
+                    # 1. Encoder Homogeneity (Matches Eval Script: relative_l2_error)
+                    latent_scaled_input = model.encode(x * scale_tensor)
+                    target_latent = latent * scale_tensor
 
-                    # 2. Signal equivariance
-                    generated_scaled = model.generate(
-                        diffusion_steps=1, latents=latent * scale_tensor
-                    ).to(pl_module.device)
+                    # We use the relative_l2_error function imported from linear_cae.metrics
+                    enc_homogeneity_err = relative_l2_error(latent_scaled_input, target_latent)
+                    self.all_metrics[val_set]["enc_homogeneity"].update(enc_homogeneity_err)
 
-                    signal_error = mse(
-                        generated_scaled[:, :T],
-                        scale_tensor * generated_samples[:, :T],
-                    ).mean(dim=(1))
-                    self.all_metrics[val_set]["gain_equivariance_error_signal"].update(signal_error)
+                    # 2. Decoder Homogeneity (Matches Eval Script: SNR)
+                    generated_scaled_latent = model.generate(
+                        diffusion_steps=1, latents=target_latent
+                    )[:, :T]
+                    target_signal = generated_samples[:, :T] * scale_tensor
 
-                del latent_scaled
+                    # Eval script uses negative SNR as a loss/metric
+                    # We negate it back to get the positive SNR value for logging
+                    self.all_metrics[val_set]["dec_homogeneity_snr"].update(
+                        generated_scaled_latent, target_signal
+                    )
+
+                del latent_scaled_input, generated_scaled_latent
 
             # Reconstruction metrics
             if self.sdr:
-                self.all_metrics[val_set]["sd-sdr"].update(
+
+                # Pure SNR calculation
+
+                self.all_metrics[val_set]["snr"].update(
                     generated_samples[:, :T].unsqueeze(1), x.unsqueeze(1)
                 )
             if self.si_sdr:
@@ -366,11 +370,11 @@ class TestModelCallback(Callback):
             dec_sum = model.generate(diffusion_steps=1, latents=latent_sum)
             dec_mix = model.generate(diffusion_steps=1, latents=latent_mix)
 
-            self.all_metrics[val_set]["composability"].update(
+            self.all_metrics[val_set]["dec_additivity"].update(
                 dec_sum[:, :T].unsqueeze(1),
                 dec_mix[:, :T].unsqueeze(1),
             )
-            self.all_metrics[val_set]["additivity"].update(
+            self.all_metrics[val_set]["enc_additivity"].update(
                 relative_l2_error(latent_sum, latent_mix)
             )
 
