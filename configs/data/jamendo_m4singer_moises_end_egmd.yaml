@@ -1,0 +1,8 @@
+data_paths:
+  - ${get_jamendo_paths:${paths.data_dir}, 99}
+  - "data/m4singer"
+  - "data/moisesdb"
+  - "data/DNS-Challenge/clean_fullband_symlinks"
+  - "data/egmd"
+
+data_fractions: [0.6, 0.09, 0.2, 0.08, 0.03]

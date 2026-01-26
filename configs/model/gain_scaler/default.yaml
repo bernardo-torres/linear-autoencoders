@@ -1,0 +1,10 @@
+_target_: linear_cae.train.GainScaler
+batch_size: ${data.batch_size}
+prob: 0.8
+gain_min: 0.5
+gain_max: 1.0
+prob_decay: false
+gain_decay: false
+total_iters: ${trainer.max_steps} # Total iterations for decay
+zero_threshold: 0.05 # below this threshold, the gain will be set to zero
+device: "cuda"

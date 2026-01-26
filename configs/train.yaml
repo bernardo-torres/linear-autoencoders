@@ -1,0 +1,104 @@
+# @package _global_
+defaults:
+  - _self_
+  - callbacks: default
+  - model: lin_cae
+  - data: jamendo_m4singer_moises_end_egmd
+  - override hydra/hydra_logging: colorlog
+  - override hydra/job_logging: colorlog
+
+seed: 42
+ckpt_path: null
+sample_rate: 44100
+iters_per_epoch: 25000 # This is the number of iterations per epoch, independent of the dataset size
+num_log_examples: 4
+# --------- Tasks ---------
+task_name: "train"
+train: true
+test: false
+compile_model: false
+
+notes: ""
+
+# --------- Devices, strategy, precison, etc ---------
+trainer:
+  # _target_: m2l.train.TrainerWithManualStepCount
+  _target_: lightning.pytorch.Trainer
+  min_epochs: 1 # prevents early stopping
+  # max_epochs: 2000
+  accelerator: gpu
+  strategy: ddp_find_unused_parameters_true
+  devices: 1
+  precision: 16-mixed
+  # check_val_every_n_epoch: 50
+  deterministic:
+    False
+    # accumulate_gradients: 1
+  max_steps: 800000
+  log_every_n_steps: 100
+# ---------- Training settings ---------
+
+# We put loading separately because they don't affect the hash
+data_loading:
+  num_workers: 20
+  prefetch_factor: 2
+  persistent_workers: true
+  pin_memory: true
+  batch_size_val: 20
+  num_workers_val: 4
+
+data:
+  batch_size: 20
+  # --------- Dataset ---------
+  data_extensions: [".wav", ".flac", ".mp3"]
+  data_channels: 2
+  data_paths: ${get_jamendo_paths:${paths.data_dir}, 99}
+  data_fractions: null
+
+  # --------- Data loading (waveform length , etc) ---------
+  data_length: 64 # Number of input spectrogram frames
+  rms_min: 0.001
+
+  hop: ${model.frontend.hop_size} # must match frontend (do not change here)
+  fac: ${model.frontend.n_fft_factor} # must match frontend (do not change here)
+  iters_per_epoch: ${iters_per_epoch} # Set globally (do not change here)
+
+  # --------- Evaluation data ---------
+  data_path_test: null # for backward compatibility
+  max_val_samples: 500 # Maximum number of samples to evaluate
+  validation_sets:
+    # medleydb:
+    #   data_paths: "${paths.data_dir}/medleydb"
+    jamendo_99:
+      data_paths: "${paths.data_dir}/jamendo/audio/99" # path of samples used for testing (e.g. musiccaps)
+
+  test_sets:
+    jamendo_99:
+      data_paths: "${paths.data_dir}/jamendo/audio/99" # path of samples used for testing (e.g. musiccaps)
+  data_length_test: 256
+  crop_to_length: true # whether to crop test audio to crop_test_audio
+  crop_test_audio: ${eval:'${sample_rate}*10'} # length of audio to crop for evaluation
+
+# callbacks:
+#   test_model:
+#     batch_size_eval: 20
+
+paths:
+  root_dir: ${oc.env:PROJECT_ROOT}
+  data_dir: ${paths.root_dir}/data
+  log_dir: ${paths.root_dir}/logs
+  hash: hydra_logs
+  timestamp: ${now:%Y-%m-%d_%H-%M-%S}
+  output_dir: ${paths.log_dir}/${paths.timestamp}
+  ckpt_dir: ${paths.output_dir}/checkpoints
+  hydra_dir: ${hydra:runtime.output_dir}
+  # hash: ${oc.env:HASH}
+
+hydra:
+  run:
+    dir: ${paths.output_dir}
+  job_logging:
+    handlers:
+      file:
+        # Incorporates fix from https://github.com/facebookresearch/hydra/pull/2242
+        filename: ${hydra.runtime.output_dir}/${task_name}.log

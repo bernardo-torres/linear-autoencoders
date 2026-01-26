@@ -1,0 +1,3 @@
+defaults:
+  - lin_cae
+  - override /gain_scaler: +++range # no decay

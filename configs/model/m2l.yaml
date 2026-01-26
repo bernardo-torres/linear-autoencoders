@@ -1,0 +1,8 @@
+defaults:
+  - lin_cae
+
+gain_equivariance: null
+additivity: false
+
+mixit_augmentation: true
+scale_augmentation: true

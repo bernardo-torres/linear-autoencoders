@@ -1,0 +1,13 @@
+test_model:
+  _target_: linear_cae.callbacks.test_model.TestModelCallback
+  num_log_examples: ${num_log_examples}
+  # crop_test_audio: ${data.crop_test_audio}
+  # crop_to_length: ${data.crop_to_length}
+  # batch_size_eval: 20
+  reconstruction_loss: true
+  equivariance_loss: true
+  log_examples: true
+  log_latents: true
+  diffusion_steps: 4
+  validation_sets: ${data.validation_sets}
+  test_sets: ${data.test_sets}

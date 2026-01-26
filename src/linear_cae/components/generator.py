@@ -16,8 +16,7 @@ from linear_cae.components.blocks import (
 from linear_cae.components.diffusion import get_c
 
 
-# "+model.eqvae=true"
-# Let's refactor the bottleneck to be a separate class
+# Let's refactor the bottleneck to be a separate class (not finished yet)
 class Bottleneck(nn.Module):
     def __init__(
         self,
@@ -107,7 +106,6 @@ class Bottleneck(nn.Module):
         return x
 
 
-
 class Encoder(nn.Module):
     def __init__(
         self,
@@ -156,9 +154,7 @@ class Encoder(nn.Module):
         self.freq_dim = self.freq_dim // (2 ** freq_downsample_list.count(0))
 
         down_layers = []
-        for i, (num_layers, multiplier) in enumerate(
-            zip(layers_list, multipliers_list)
-        ):
+        for i, (num_layers, multiplier) in enumerate(zip(layers_list, multipliers_list)):
             output_channels = base_channels * multiplier
             for _ in range(num_layers):
                 down_layers.append(
@@ -196,9 +192,7 @@ class Encoder(nn.Module):
         self.down_layers = nn.ModuleList(down_layers)
 
         if pre_normalize_2d_to_1d:
-            self.prenorm_1d_to_2d = nn.GroupNorm(
-                min(input_channels // 4, 32), input_channels
-            )
+            self.prenorm_1d_to_2d = nn.GroupNorm(min(input_channels // 4, 32), input_channels)
 
         output_channels = bottleneck_base_channels
 
@@ -243,9 +237,7 @@ class Encoder(nn.Module):
                     )
                 )
             # self.bottleneck_layers = nn.ModuleList(bottleneck_layers)
-            self.bottleneck_layers = nn.Sequential(
-                *bottleneck_layers
-            )  # may be more efficient
+            self.bottleneck_layers = nn.Sequential(*bottleneck_layers)  # may be more efficient
 
             self.norm_out = nn.GroupNorm(min(output_channels // 4, 32), output_channels)
             self.activation_out = nn.SiLU()
@@ -305,9 +297,7 @@ class Encoder(nn.Module):
         # x = self.conv_out(x)
         # x = self.activation_bottleneck(x)
         if from_original_shape:
-            x = x.reshape(
-                x.size(0), self.bottleneck_layers.input_channels, -1, x.size(-1)
-            )
+            x = x.reshape(x.size(0), self.bottleneck_layers.input_channels, -1, x.size(-1))
         if self.legacy_bottleneck:
             for layer in self.bottleneck_layers:
                 x = layer(x)
@@ -318,7 +308,6 @@ class Encoder(nn.Module):
         else:
             x = self.bottleneck_layers(x)
         return x
-
 
 
 class Decoder(nn.Module):
@@ -392,9 +381,7 @@ class Decoder(nn.Module):
                     )
                 )
             # self.bottleneck_layers = nn.ModuleList(bottleneck_layers)
-            self.bottleneck_layers = nn.Sequential(
-                *bottleneck_layers
-            )  # may be more efficient
+            self.bottleneck_layers = nn.Sequential(*bottleneck_layers)  # may be more efficient
 
             self.conv_out_bottleneck = nn.Conv1d(
                 bottleneck_base_channels,
@@ -573,9 +560,7 @@ class UNet(nn.Module):
 
         # Embeddings for noise conditioning
         if use_fourier:
-            self.emb = GaussianFourierProjection(
-                embedding_size=cond_channels, scale=fourier_scale
-            )
+            self.emb = GaussianFourierProjection(embedding_size=cond_channels, scale=fourier_scale)
         else:
             self.emb = PositionalEmbedding(embedding_size=cond_channels)
 
@@ -614,9 +599,7 @@ class UNet(nn.Module):
 
         # Downsampling path
         down_layers = []
-        for i, (num_layers, multiplier) in enumerate(
-            zip(layers_list, multipliers_list)
-        ):
+        for i, (num_layers, multiplier) in enumerate(zip(layers_list, multipliers_list)):
             output_channels = base_channels * multiplier
             for _ in range(num_layers):
                 down_layers.append(
@@ -647,9 +630,7 @@ class UNet(nn.Module):
             if i != len(layers_list) - 1:
                 output_channels = base_channels * multipliers_list[i + 1]
                 if freq_downsample_list[i] == 1:
-                    down_layers.append(
-                        DownsampleFreqConv(input_channels, output_channels)
-                    )
+                    down_layers.append(DownsampleFreqConv(input_channels, output_channels))
                 else:
                     down_layers.append(
                         DownsampleConv(
@@ -715,9 +696,7 @@ class UNet(nn.Module):
 
         self.up_layers = nn.ModuleList(up_layers)
 
-        self.conv_decoded = Conv(
-            input_channels, input_channels, kernel_size=1, stride=1, padding=0
-        )
+        self.conv_decoded = Conv(input_channels, input_channels, kernel_size=1, stride=1, padding=0)
         self.norm_out = nn.GroupNorm(min(input_channels // 4, 32), input_channels)
         self.activation_out = nn.SiLU()
         self.conv_out = zero_init(
@@ -798,9 +777,7 @@ class UNet(nn.Module):
 
         return out
 
-    def forward(
-        self, data_encoder, noisy_samples, noisy_samples_plus_one, sigmas_step, sigmas
-    ):
+    def forward(self, data_encoder, noisy_samples, noisy_samples_plus_one, sigmas_step, sigmas):
         latents = self.encoder(data_encoder)
         pyramid_latents = self.decoder(latents)
         fdata = self.forward_generator(

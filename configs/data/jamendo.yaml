@@ -1,0 +1,2 @@
+data_paths:
+  - ${get_jamendo_paths:${paths.data_dir}, 99}

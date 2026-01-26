@@ -1,0 +1,6 @@
+defaults:
+ - default
+gain_min: 0
+gain_max: 3
+prob_decay: false
+gain_decay: false

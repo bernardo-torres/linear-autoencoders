@@ -1,0 +1,91 @@
+defaults:
+  - gain_scaler: +++range-decay
+
+_target_: linear_cae.train.CAETrainer
+compile_model: ${compile_model} # Tries to use torch.compile
+
+sample_rate: ${sample_rate}
+output_dir: ${paths.output_dir}
+# --------- Optimizer, learning rate ---------
+lr: 0.0001
+final_lr: 0.000001
+lr_decay: "cosine"
+optimizer: "radam"
+optimizer_beta1: 0.9
+optimizer_beta2: 0.999
+warmup_steps: 10000 # in the linear_cae code, this is set to iters_per_epoch. Since we want to validate more often, we set it to 10k to match the paper
+
+normalize_gain_augmentation: false
+# ---------- EMA settings ---------
+enable_ema: true
+ema_momentum: 0.9999
+warmup_ema: true
+ema_update_every: 10
+
+# ---------- Additivity  ---------
+additivity: true
+prob_additivity_switch: 1.0 # Probability of using additivity per element in the batch
+
+# --------- Homogeneity (Gain equivariance) ---------
+gain_equivariance: teacher_student
+
+#  --- --------- Input frontend ---------
+frontend:
+  _target_: linear_cae.components.frontends.ScaledComplexSTFT
+  hop_size: 512
+  n_fft_factor: 4 # factor to multiply the hop size by to get the number of FFT points
+  alpha_rescale: 0.65 # alpha rescale parameter for STFT representation
+  beta_rescale: 0.34 # beta rescale parameter for STFT representation
+  sample_rate: ${sample_rate} # Sample rate the model expects
+
+# -------- UNet settings ---------
+generator:
+  _target_: linear_cae.components.generator.UNet
+  base_channels: 64
+  layers_list: [2, 2, 2, 2, 2]
+  multipliers_list: [1, 2, 4, 4, 4]
+  attention_list: [0, 0, 1, 1, 1]
+  freq_downsample_list: [1, 0, 0, 0]
+
+  layers_list_encoder: [1, 1, 1, 1, 1]
+  attention_list_encoder: [0, 0, 1, 1, 1]
+  bottleneck_base_channels: 512
+  num_bottleneck_layers: 4
+  frequency_scaling: true
+
+  heads: 4
+  cond_channels: 256
+  use_fourier: false
+  fourier_scale: 0.2
+  normalization: true
+  dropout_rate: 0.
+  min_res_dropout: 16
+  bottleneck_channels: 64
+  pre_normalize_2d_to_1d: true
+  pre_normalize_downsampling_encoder: true
+  init_as_zero: true
+
+  hop: ${model.frontend.hop_size}
+  sigma_max: ${model.diffusion.sigma_max}
+  sigma_min: ${model.diffusion.sigma_min}
+  sigma_data: ${model.diffusion.sigma_data}
+  data_channels: ${data.data_channels} # Mono or stereo
+
+# --------- Diffusion settings ---------
+diffusion:
+  _target_: linear_cae.components.diffusion.Diffusion
+  schedule: "exponential"
+  start_exp: 1.
+  end_exp: 2.0
+  base_step: 0.1
+
+  sigma_min: 0.002
+  sigma_max: 80.
+  rho: 7.
+
+  use_lognormal: true
+  p_mean: -1.1
+  p_std: 2.
+
+  sigma_data: 0.5
+  total_iters: ${trainer.max_steps} # total number of training iterations

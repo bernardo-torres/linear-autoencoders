@@ -1,0 +1,4 @@
+defaults:
+ - +++range
+prob_decay: false
+gain_decay: true
