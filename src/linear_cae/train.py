@@ -314,8 +314,7 @@ class CAETrainer(LightningModule):
 
         if self.scale_augmentation or self.gain_equivariance:
             gain_scaler.cap_gain(data_input)
-            scaled_data = gain_scaler(data_input)
-            scaled_data_rep = self.frontend.to_representation(scaled_data)
+            scaled_data_rep = self.frontend.to_representation(gain_scaler(data_input))
         else:
             scaled_data_rep = data_rep
 
