@@ -16,7 +16,7 @@ num_log_examples: 4
 task_name: "train"
 train: true
 test: false
-compile_model: false
+compile_model: true
 
 notes: ""
 
