@@ -17,7 +17,7 @@ This creates a structured latent space where simple algebraic operations corresp
   <img src="https://bernardo-torres.github.io/documents/images/linear-cae/overview.png" width="400"/>
 </p>
 
-This repository currently provides inference code for our pretrained models and the code to reproduce the demos on our project page. Training code will be made available soon.
+This repository currently provides inference code for our pretrained models, code to reproduce the demos on our project page and model training code.
 
 ## Usage
 
@@ -107,9 +107,67 @@ reconstructed_mix = model.decode(z_chunked, full_length=long_audio_tensor_1.shap
 
 The model uses an overlap-add mechanism with a crossfade to stitch the decoded chunks back together. You can control the amount of overlap with the `overlap_percentage` argument during model initialization. We recommend some overlap to avoid artifacts at chunk boundaries.
 
+## Development & Training
+
+This project uses [Poetry](https://python-poetry.org/) for dependency management and [Hydra](https://hydra.cc/) for configuration. The following steps will guide you through setting up the environment and launching training runs.
+
+### Environment Setup
+
+1. **Create a Conda environment:**
+
+```bash
+conda create --name lin-cae python=3.11
+conda activate lin-cae
+```
+
+2. **Install Poetry:**
+   If you don't have Poetry installed, you can install it within your environment:
+
+```bash
+curl -sSL [https://install.python-poetry.org](https://install.python-poetry.org) | python3 -
+```
+
+3. **Clone the repository**
+4. **Install dependencies:**
+
+```bash
+# in project root directory
+# Install with development dependencies (wandb, hydra, etc.)
+poetry install --with dev
+```
+
+5. **Dataset Preparation:**
+   Add symlinks to your datasets in the `data/` directory and make sure paths in `configs/data` point to the correct locations. Default data config is `jamendo_m4singer_moises_end_egmd.yaml`, which can be overriden by your own using Hydra (e.g., `data=your_config`).
+
+```bash
+ln -s /path/to/your/jamendo /my/project/dir/data/jamendo/audio
+```
+
+### Training with Hydra
+
+The training process is managed by `src/linear_cae/launch.py` using Hydra for configuration management. Configurations are located in the `configs/` directory.
+
+To start a default training run:
+
+```bash
+python src/linear_cae/launch.py
+```
+
+You can override any configuration parameter from the command line:
+
+- **Change learning rate/batch size:** `python src/linear_cae/launch.py model.lr=2e-4 data.batch_size=16`
+- **Retrain M2L without linear properties** `python src/linear_cae/launch.py model=m2l`
+- **Resume from checkpoint:** `python src/linear_cae/launch.py ckpt_path=/path/to/checkpoint.ckpt`
+
+Training metrics and audio samples are logged to **Weights & Biases (WandB)** by default.
+
+### Checkpoint Conversion
+
+After training, the script automatically converts the Lightning checkpoint into an inference-ready format (saving `.pth` weights and `.yaml` kwargs).
+
 ## Algorithm
 
-While the full training code for CAEs will be released soon, here is a general pseudo-algorithm for how to adapt any autoencoder training loop to induce linearity using our proposed method. The core idea is to use data augmentation to implicitly teach the model the properties of linearity.
+Here is a general pseudo-algorithm for how to adapt any autoencoder training loop to induce linearity using our proposed method. The core idea is to use data augmentation to implicitly teach the model the properties of linearity.
 
 ```python
 # Pseudo-algorithm for training a linear autoencoder

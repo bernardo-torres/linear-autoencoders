@@ -510,6 +510,9 @@ class CAETrainer(LightningModule):
         if self.automatic_optimization:
             self.update_ema()
 
+        if self.it % 1000 == 0:
+            torch.cuda.empty_cache()
+
     # ------ Legacy code, does nothing, all validation was moved to external callbacks ------
     def validation_step(self, batch, batch_idx, *args, **kwargs):
         return None
