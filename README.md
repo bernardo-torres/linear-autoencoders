@@ -109,7 +109,7 @@ The model uses an overlap-add mechanism with a crossfade to stitch the decoded c
 
 ## Development & Training
 
-This project uses [Poetry](https://python-poetry.org/) for dependency management and [Hydra](https://hydra.cc/) for configuration. The following steps will guide you through setting up the environment and launching training runs.
+This project uses [Poetry](https://python-poetry.org/) for dependency management, [Hydra](https://hydra.cc/) for configuration and [PyTorch Lightning](https://www.pytorchlightning.ai/) for training. The following steps will guide you through setting up the environment and launching training runs.
 
 ### Environment Setup
 
@@ -159,7 +159,7 @@ You can override any configuration parameter from the command line:
 - **Retrain M2L without linear properties** `python src/linear_cae/launch.py model=m2l`
 - **Resume from checkpoint:** `python src/linear_cae/launch.py ckpt_path=/path/to/checkpoint.ckpt`
 
-Training metrics and audio samples are logged to **Weights & Biases (WandB)** by default.
+Training metrics and audio samples are logged to **Weights & Biases (WandB)** by default. Training with default settings takes approximately 8 days on a single NVIDIA L40S GPU. You can probably shorten this time by using multiple GPUs (lightning should handle this easily), reducing the number of training steps, or reducing the sample rate. Due to the diffusion step size annealing, it is very important that training runs for the full number of steps specified in the config. For faster/dev runs, consider reducing that value accordingly instead of stopping early.
 
 ### Checkpoint Conversion
 
